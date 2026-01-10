@@ -16,9 +16,11 @@ Usage: $(basename "$0") [options]
 Options:
     -m, --model [value]    Specify the model code of the phone
     -k, --ksu [y/N]        Include KernelSU
+    -s, --susfs [y/N]      Include SuSFS
 EOF
 }
 
+# --- Argument Parsing ---
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --model|-m)
@@ -29,7 +31,11 @@ while [[ $# -gt 0 ]]; do
             KSU_OPTION="$2"
             shift 2
             ;;
-        *)\
+        --susfs|-s)
+            SUSFS_OPTION="$2"
+            shift 2
+            ;;
+        *)
             unset_flags
             exit 1
             ;;
@@ -54,80 +60,29 @@ READELF=$CLANG_DIR/bin/llvm-readelf \
 O=out
 "
 
-# Define specific variables
-KERNEL_DEFCONFIG=extreme_"$MODEL"_defconfig
+# --- Model Configuration ---
 case $MODEL in
-beyond0lte)
-    BOARD=SRPRI28A016KU
-    SOC=exynos9820
-    TZDEV=new
-;;
-beyond0lteks)
-    BOARD=SRPRI28C007KU
-    SOC=exynos9820
-    TZDEV=new
-;;
-beyond1lte)
-    BOARD=SRPRI28B016KU
-    SOC=exynos9820
-    TZDEV=new
-;;
-beyond1lteks)
-    BOARD=SRPRI28D007KU
-    SOC=exynos9820
-    TZDEV=new
-;;
-beyond2lte)
-    BOARD=SRPRI17C016KU
-    SOC=exynos9820
-    TZDEV=new
-;;
-beyond2lteks)
-    BOARD=SRPRI28E007KU
-    SOC=exynos9820
-    TZDEV=new
-;;
-beyondx)
-    BOARD=SRPSC04B014KU
-    SOC=exynos9820
-    TZDEV=new
-;;
-beyondxks)
-    BOARD=SRPRK21D006KU
-    SOC=exynos9820
-    TZDEV=new
-;;
-d1)
-    BOARD=SRPSD26B009KU
-    SOC=exynos9825
-    TZDEV=old
-;;
-d1xks)
-    BOARD=SRPSD23A002KU
-    SOC=exynos9825
-    TZDEV=new
-;;
-d2s)
-    BOARD=SRPSC14B009KU
-    SOC=exynos9825
-    TZDEV=old
-;;
-d2x)
-    BOARD=SRPSC14C009KU
-    SOC=exynos9825
-    TZDEV=old
-;;
-d2xks)
-    BOARD=SRPSD23C002KU
-    SOC=exynos9825
-    TZDEV=new
-;;
-*)
-    unset_flags
-    exit
+    beyond0lte)   BOARD=SRPRI28A016KU; SOC=exynos9820; TZDEV=new ;;
+    beyond0lteks) BOARD=SRPRI28C007KU; SOC=exynos9820; TZDEV=new ;;
+    beyond1lte)   BOARD=SRPRI28B016KU; SOC=exynos9820; TZDEV=new ;;
+    beyond1lteks) BOARD=SRPRI28D007KU; SOC=exynos9820; TZDEV=new ;;
+    beyond2lte)   BOARD=SRPRI17C016KU; SOC=exynos9820; TZDEV=new ;;
+    beyond2lteks) BOARD=SRPRI28E007KU; SOC=exynos9820; TZDEV=new ;;
+    beyondx)      BOARD=SRPSC04B014KU; SOC=exynos9820; TZDEV=new ;;
+    beyondxks)    BOARD=SRPRK21D006KU; SOC=exynos9820; TZDEV=new ;;
+    d1)           BOARD=SRPSD26B009KU; SOC=exynos9825; TZDEV=old ;;
+    d1xks)        BOARD=SRPSD23A002KU; SOC=exynos9825; TZDEV=new ;;
+    d2s)          BOARD=SRPSC14B009KU; SOC=exynos9825; TZDEV=old ;;
+    d2x)          BOARD=SRPSC14C009KU; SOC=exynos9825; TZDEV=old ;;
+    d2xks)        BOARD=SRPSD23C002KU; SOC=exynos9825; TZDEV=new ;;
+    *) unset_flags; exit ;;
 esac
 
-if [ -z $KSU_OPTION ]; then
+KERNEL_DEFCONFIG=extreme_"$MODEL"_defconfig
+DEFCONFIG_PATH="arch/arm64/configs/$KERNEL_DEFCONFIG"
+
+# --- Feature Selection ---
+if [ -z "$KSU_OPTION" ]; then
     read -p "Include KernelSU (y/N): " KSU_OPTION
 fi
 
@@ -135,42 +90,64 @@ if [[ "$KSU_OPTION" == "y" ]]; then
     KSU=ksu.config
 fi
 
-rm -rf arch/arm64/configs/temp_defconfig
+if [ -z "$SUSFS_OPTION" ]; then
+    read -p "Include SuSFS (y/N): " SUSFS_OPTION
+fi
+
+# --- Inject SuSFS into Defconfig ---
+if [[ "$SUSFS_OPTION" == "y" ]]; then
+    echo "Injecting SuSFS configs into $KERNEL_DEFCONFIG..."
+    
+    # Remove existing SuSFS configs to avoid duplicates
+    sed -i '/CONFIG_KSU_SUSFS/d' "$DEFCONFIG_PATH"
+    
+    # Append the new SuSFS configs
+    cat << EOF >> "$DEFCONFIG_PATH"
+CONFIG_KSU_SUSFS=y
+CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_PATH=n
+CONFIG_KSU_SUSFS_SUS_MOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_KSTAT=y
+CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y
+CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+CONFIG_KSU_SUSFS_SPOOF_UNAME=n
+CONFIG_KSU_SUSFS_ENABLE_LOG=y
+CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=n
+CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+CONFIG_KSU_SUSFS_SUS_SU=y
+EOF
+    
+    SUSFS_HEADER="include/linux/susfs.h"
+    if [ -f "$SUSFS_HEADER" ]; then
+        SUSFS_VERSION=$(grep -E '^#define[[:space:]]+SUSFS_VERSION' "$SUSFS_HEADER" | awk '{print $3}' | tr -d '"')
+    fi
+fi
+
+# Cleanup previous builds
 rm -rf build/out/$MODEL
 mkdir -p build/out/$MODEL/zip/files
 mkdir -p build/out/$MODEL/zip/META-INF/com/google/android
 
-# Build kernel image
+# --- Build Kernel Image ---
 echo "-----------------------------------------------"
-echo "Defconfig: "$KERNEL_DEFCONFIG""
-if [ -z "$KSU" ]; then
-    echo "KSU: N"
-else
-    echo "KSU: $KSU"
-fi
+echo "Defconfig: $KERNEL_DEFCONFIG"
+echo "KSU: ${KSU_OPTION:-n}"
+echo "SuSFS: ${SUSFS_OPTION:-n} ${SUSFS_VERSION}"
+echo "-----------------------------------------------"
 
-# International Note 10 models use older TZDEV driver
-# Korean Note 10 models along with all S10 models (both INTL and KOR)
-# use newer TZDEV
-# So we will dynamically change it based on model
-# ...Samsung...
-
-# If model wants new TZDEV and current TZDEV is old, switch it
-# New tzdev has an extra "umem.c" file, we check if it doesn't exist
+# TZDEV Switching logic
 if [ "$TZDEV" == "new" ] && [ ! -e "drivers/misc/tzdev/umem.c" ]; then
     echo "Switching to new TZDEV..."
-    rm -rf drivers/misc/tzdev
-    rm -rf out/drivers/misc/tzdev
+    rm -rf drivers/misc/tzdev out/drivers/misc/tzdev
     mkdir -p drivers/misc/tzdev
     cp -a build/tzdev/new/* drivers/misc/tzdev
-fi
-
-# If model wants old TZDEV and current TZDEV is old, switch it
-# New tzdev has an extra "umem.c" file, we check if it exists
-if [ "$TZDEV" == "old" ] && [ -e "drivers/misc/tzdev/umem.c" ]; then
+elif [ "$TZDEV" == "old" ] && [ -e "drivers/misc/tzdev/umem.c" ]; then
     echo "Switching to old TZDEV..."
-    rm -rf drivers/misc/tzdev
-    rm -rf out/drivers/misc/tzdev
+    rm -rf drivers/misc/tzdev out/drivers/misc/tzdev
     mkdir -p drivers/misc/tzdev
     cp -a build/tzdev/old/* drivers/misc/tzdev
 fi
@@ -179,17 +156,16 @@ if [[ "$SOC" == "exynos9825" ]]; then
     N10=9825.config
 fi
 
-echo "-----------------------------------------------"
-echo "Building kernel using "$KERNEL_DEFCONFIG""
+echo "Building kernel using $KERNEL_DEFCONFIG"
 echo "Generating configuration file..."
 echo "-----------------------------------------------"
 make ${MAKE_ARGS} -j$CORES $KERNEL_DEFCONFIG extreme.config $KSU $N10 || abort
 
-echo "Building kernel..."
+echo "Building kernel binary..."
 echo "-----------------------------------------------"
 make ${MAKE_ARGS} -j$CORES || abort
 
-# Define constant variables
+# --- Image Creation (dtb, dtbo, ramdisk, mkbootimg) ---
 KERNEL_PATH=build/out/$MODEL/Image
 KERNEL_OFFSET=0x00008000
 RAMDISK_OFFSET=0xF0000000
@@ -205,51 +181,27 @@ PAGESIZE=2048
 RAMDISK=build/out/$MODEL/ramdisk.cpio.gz
 OUTPUT_FILE=build/out/$MODEL/boot.img
 
-## Build auxiliary boot.img files
-# Copy kernel to build
 cp out/arch/arm64/boot/Image build/out/$MODEL
 
-# Build dtb
 if [[ "$SOC" == "exynos9820" ]]; then
-    echo "Building common exynos9820 Device Tree Blob Image..."
-    echo "-----------------------------------------------"
     ./toolchain/mkdtimg cfg_create build/out/$MODEL/dtb.img build/dtconfigs/exynos9820.cfg -d out/arch/arm64/boot/dts/exynos
-fi
-
-if [[ "$SOC" == "exynos9825" ]]; then
-    echo "Building common exynos9825 Device Tree Blob Image..."
-    echo "-----------------------------------------------"
+elif [[ "$SOC" == "exynos9825" ]]; then
     ./toolchain/mkdtimg cfg_create build/out/$MODEL/dtb.img build/dtconfigs/exynos9825.cfg -d out/arch/arm64/boot/dts/exynos
 fi
-echo "-----------------------------------------------"
 
-# Build dtbo
-echo "Building Device Tree Blob Output Image for "$MODEL"..."
-echo "-----------------------------------------------"
 ./toolchain/mkdtimg cfg_create build/out/$MODEL/dtbo.img build/dtconfigs/$MODEL.cfg -d out/arch/arm64/boot/dts/samsung
-echo "-----------------------------------------------"
-
-# Build ramdisk
-echo "Building RAMDisk..."
-echo "-----------------------------------------------"
 
 pushd build/ramdisk > /dev/null
 find . ! -name . | LC_ALL=C sort | cpio -o -H newc -R root:root | gzip > ../out/$MODEL/ramdisk.cpio.gz || abort
 popd > /dev/null
-echo "-----------------------------------------------"
 
-# Create boot image
-echo "Creating boot image..."
-echo "-----------------------------------------------"
 ./toolchain/mkbootimg --base $BASE --board $BOARD --cmdline "$CMDLINE" --hashtype $HASHTYPE \
 --header_version $HEADER_VERSION --kernel $KERNEL_PATH --kernel_offset $KERNEL_OFFSET \
 --os_patch_level $OS_PATCH_LEVEL --os_version $OS_VERSION --pagesize $PAGESIZE \
 --ramdisk $RAMDISK --ramdisk_offset $RAMDISK_OFFSET --second_offset $SECOND_OFFSET \
 --tags_offset $TAGS_OFFSET -o $OUTPUT_FILE || abort
 
-# Build zip
-echo "Building zip..."
-echo "-----------------------------------------------"
+# --- Packaging ---
 cp build/out/$MODEL/boot.img build/out/$MODEL/zip/files/boot.img
 cp build/out/$MODEL/dtb.img build/out/$MODEL/zip/files/dtb.img
 cp build/out/$MODEL/dtbo.img build/out/$MODEL/zip/files/dtbo.img
@@ -262,16 +214,17 @@ else
     version=$(grep -o 'CONFIG_LOCALVERSION="[^"]*"' arch/arm64/configs/extreme.config | cut -d '"' -f 2)
 fi
 version=${version:1}
+
 pushd build/out/$MODEL/zip > /dev/null
 DATE=`date +"%d-%m-%Y_%H-%M-%S"`    
 
-if [[ "$KSU_OPTION" == "y" ]]; then
-    NAME="$version"_"$MODEL"_UNOFFICIAL_KSU_"$DATE".zip
-else
-    NAME="$version"_"$MODEL"_UNOFFICIAL_"$DATE".zip
-fi
+NAME="${version}_${MODEL}_UNOFFICIAL"
+[[ "$KSU_OPTION" == "y" ]] && NAME="${NAME}_KSU"
+[[ "$SUSFS_OPTION" == "y" ]] && NAME="${NAME}_SuSFS"
+NAME="${NAME}_${DATE}.zip"
+
 zip -r -qq ../"$NAME" .
 popd > /dev/null
 popd > /dev/null
 
-echo "Build finished successfully!"
+echo "Build finished successfully: $NAME"
