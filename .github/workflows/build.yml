@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -24,14 +24,23 @@ jobs:
             git-core gnupg flex bison build-essential zip curl \
             zlib1g-dev libc6-dev-i386 x11proto-core-dev libx11-dev \
             lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc \
-            unzip fontconfig lld llvm
+            unzip fontconfig
 
       - name: Make build script executable
         run: chmod +x build.sh
 
       - name: Run build script
         run: |
-          # Inject CFLAGS to ignore strict prototype errors
+          # Inject CFLAGS to suppress the strict-prototypes error you encountered
           export CFLAGS="$CFLAGS -Wno-error=strict-prototypes -Wno-strict-prototypes"
           export CPPFLAGS="$CPPFLAGS -Wno-error=strict-prototypes -Wno-strict-prototypes"
           ./build.sh -m all -k y -s y
+
+      - name: Upload Build Artifacts
+        if: always() # Upload even if some models failed
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-builds-${{ github.run_id }}
+          path: |
+            build/out/**/*.zip
+          if-no-files-found: error
