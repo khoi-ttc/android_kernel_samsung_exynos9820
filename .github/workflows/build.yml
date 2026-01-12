@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout code
@@ -30,4 +30,8 @@ jobs:
         run: chmod +x build.sh
 
       - name: Run build script
-        run: ./build.sh -m all -k y -s y
+        run: |
+          # Inject CFLAGS to ignore strict prototype errors
+          export CFLAGS="$CFLAGS -Wno-error=strict-prototypes -Wno-strict-prototypes"
+          export CPPFLAGS="$CPPFLAGS -Wno-error=strict-prototypes -Wno-strict-prototypes"
+          ./build.sh -m all -k y -s y
