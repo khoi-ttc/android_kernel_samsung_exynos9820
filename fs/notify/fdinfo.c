@@ -106,7 +106,7 @@ static void inotify_fdinfo(struct seq_file *m, struct fsnotify_mark *mark)
 		 * that we expose to userspace.  There is at
 		 * least one bit (FS_EVENT_ON_CHILD) which is
 		 * used only internally to the kernel.
-		 */+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+		 */#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 		if (likely(current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC) &&
 				unlikely(inode->i_state & INODE_STATE_SUS_KSTAT)) {
 			struct path path;
