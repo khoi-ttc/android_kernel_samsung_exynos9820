@@ -25,37 +25,32 @@ jobs:
             git-core gnupg flex bison build-essential zip curl \
             zlib1g-dev libc6-dev-i386 x11proto-core-dev libx11-dev \
             lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc \
-            unzip fontconfig python3 python3-pip lld llvm
+            unzip fontconfig python3 lld 
 
-      - name: Setup Toolchain
+      - name: Link Toolchain
         run: |
+          # Create the directory structure the script expects
           mkdir -p toolchain
-          echo "Downloading Clang r416183b..."
-          # Clone only the necessary clang version to save time and space
-          git clone https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 --depth=1 -b master toolchain/clang-temp
           
-          # Move the specific version to the path expected by build.sh
-          mv toolchain/clang-temp/clang-r416183b toolchain/
-          rm -rf toolchain/clang-temp
+          # IF the toolchain is in your repo under a different name, link it:
+          # ln -s $(pwd)/my_actual_clang_folder $(pwd)/toolchain/clang-r416183b
           
-          # Verify existence of the tool that caused the previous crash
-          if [ -f "toolchain/clang-r416183b/bin/llvm-readelf" ]; then
-            echo "Toolchain path verified: toolchain/clang-r416183b/bin/llvm-readelf"
-          else
-            echo "Error: Toolchain download failed or path is incorrect."
-            exit 1
-          fi
+          # IF you want to use the system's LLVM/Clang (pre-installed on Ubuntu runners):
+          # We symlink the system binaries into the folder the script expects
+          mkdir -p toolchain/clang-r416183b/bin
+          ln -s /usr/bin/llvm-readelf toolchain/clang-r416183b/bin/llvm-readelf
+          ln -s /usr/bin/clang toolchain/clang-r416183b/bin/clang
+          ln -s /usr/bin/ld.lld toolchain/clang-r416183b/bin/ld.lld
+          
+          echo "Symlinks created to redirect script to system tools."
 
       - name: Run Build Script
         run: |
-          # 1. Fix the 'strict-prototypes' error by downgrading it to a warning
+          # Suppress the strict-prototypes error
           export CFLAGS="$CFLAGS -Wno-error=strict-prototypes -Wno-strict-prototypes"
           export CPPFLAGS="$CPPFLAGS -Wno-error=strict-prototypes -Wno-strict-prototypes"
           
-          # 2. Make script executable
           chmod +x build.sh
-          
-          # 3. Execute build
           ./build.sh -m all -k y -s y
 
       - name: Upload Kernel Zips
@@ -63,6 +58,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Samsung-Exynos9820-Kernels
-          path: |
-            build/out/**/*.zip
-          if-no-files-found: warn
+          path: build/out/**/*.zip
